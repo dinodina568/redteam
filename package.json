@@ -1,0 +1,20 @@
+{
+  "name": "pantauapp",
+  "version": "1.4.2",
+  "description": "PantauApp - application & uptime monitoring dashboard (INTENTIONALLY VULNERABLE training app)",
+  "main": "src/server.js",
+  "private": true,
+  "scripts": {
+    "start": "node --no-warnings src/server.js",
+    "reset": "node --no-warnings src/db.js --reset",
+    "test": "node --no-warnings --test tests/*.test.js"
+  },
+  "engines": {
+    "node": ">=22.5"
+  },
+  "dependencies": {
+    "express": "4.21.2",
+    "jsonwebtoken": "9.0.2",
+    "lodash": "4.17.4"
+  }
+}

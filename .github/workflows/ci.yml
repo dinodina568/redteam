@@ -1,0 +1,73 @@
+# CI pipeline — runs on every push & PR. This is the AppSec assessment surface.
+name: CI
+
+on:
+  push:
+    branches: [ development, staging, main ]
+  pull_request:
+    branches: [ development, staging, main ]
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  build-test:
+    name: Build & Unit Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --no-audit --no-fund
+      - name: Seed DB
+        run: npm run reset
+      - name: Unit tests
+        run: npm test
+
+  sca:
+    name: SCA — Dependency Audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '22' }
+      - run: npm install --no-audit --no-fund
+      # Known-vulnerable deps are intentionally pinned (lodash 4.17.4, jsonwebtoken 9 misuse).
+      # Gate is non-blocking in dev so the assessment can see findings; make it blocking for staging/main.
+      - name: npm audit
+        run: npm audit --audit-level=high || true
+      - name: OSV scanner
+        uses: google/osv-scanner-action@v1
+        continue-on-error: true
+        with:
+          scan-args: |-
+            --lockfile=package-lock.json
+
+  secret-scan:
+    name: Secret Scanning
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - name: Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        continue-on-error: true
+        env:
+          GITLEAKS_ENABLE_UPLOAD_ARTIFACT: 'false'
+
+  sast:
+    name: SAST — Semgrep
+    runs-on: ubuntu-latest
+    container:
+      image: semgrep/semgrep
+    steps:
+      - uses: actions/checkout@v4
+      - name: Semgrep scan
+        run: semgrep scan --config auto --sarif --output semgrep.sarif || true
+      - name: Upload SARIF
+        uses: github/codeql-action/upload-sarif@v3
+        continue-on-error: true
+        with:
+          sarif_file: semgrep.sarif
