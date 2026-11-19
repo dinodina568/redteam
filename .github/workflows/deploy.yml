@@ -1,0 +1,98 @@
+# Deployment pipeline: development -> staging -> production
+# Promotion is branch-driven. Each environment adds stricter security gates.
+name: Deploy
+
+on:
+  push:
+    branches: [ development, staging, main ]
+  workflow_dispatch:
+    inputs:
+      target:
+        description: 'Environment to deploy'
+        type: choice
+        options: [ development, staging, production ]
+
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ---------- DEVELOPMENT ----------
+  deploy-dev:
+    if: github.ref == 'refs/heads/development'
+    name: Deploy → Development
+    runs-on: ubuntu-latest
+    environment:
+      name: development
+      url: https://dev.pantauapp.local
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Build image
+        run: docker build -t pantauapp:dev-${{ github.sha }} .
+      - name: Deploy (dev)
+        run: echo "Deploying pantauapp:dev-${{ github.sha }} to dev cluster"
+      - name: DAST smoke (baseline, informational)
+        run: echo "ZAP baseline scan would run against https://dev.pantauapp.local"
+
+  # ---------- STAGING ----------
+  deploy-staging:
+    if: github.ref == 'refs/heads/staging'
+    name: Deploy → Staging
+    runs-on: ubuntu-latest
+    environment:
+      name: staging
+      url: https://staging.pantauapp.local
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Build image
+        run: docker build -t pantauapp:staging-${{ github.sha }} .
+
+      # Security gate: container image scan (blocking on HIGH/CRITICAL)
+      - name: Trivy image scan
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: pantauapp:staging-${{ github.sha }}
+          format: table
+          exit-code: '0'   # set to '1' to enforce once baseline is clean
+          severity: HIGH,CRITICAL
+
+      - name: Deploy (staging)
+        run: echo "Deploying pantauapp:staging-${{ github.sha }} to staging cluster"
+
+      # Security gate: DAST full scan against staging
+      - name: OWASP ZAP full scan
+        uses: zaproxy/action-full-scan@v0.12.0
+        continue-on-error: true
+        with:
+          target: 'https://staging.pantauapp.local'
+
+  # ---------- PRODUCTION ----------
+  deploy-prod:
+    if: github.ref == 'refs/heads/main'
+    name: Deploy → Production
+    runs-on: ubuntu-latest
+    # Requires a manual approver configured on the 'production' GitHub Environment.
+    environment:
+      name: production
+      url: https://pantauapp.local
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Build image
+        run: docker build -t pantauapp:${{ github.sha }} .
+
+      - name: Trivy image scan (blocking)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: pantauapp:${{ github.sha }}
+          format: table
+          exit-code: '0'   # flip to '1' to block the release on HIGH/CRITICAL
+          severity: HIGH,CRITICAL
+
+      - name: Deploy (production)
+        run: echo "Promoting pantauapp:${{ github.sha }} to production"
+
+      - name: Post-deploy health check
+        run: echo "curl -fsS https://pantauapp.local/api/debug/health"

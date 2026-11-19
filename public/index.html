@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PantauApp — Application Monitoring</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<header>
+  <div class="brand">● PantauApp</div>
+  <nav id="nav" hidden>
+    <a href="#dashboard">Monitor</a>
+    <a href="#incidents">Insiden</a>
+    <a href="#team">Tim</a>
+    <a href="#billing">Billing</a>
+    <a href="#settings">Pengaturan</a>
+    <a href="#admin" id="nav-admin" hidden>Admin</a>
+    <a href="#" id="logout">Keluar</a>
+  </nav>
+</header>
+<main id="app"></main>
+<div id="toast" hidden></div>
+<!-- build: 1.4.2-rc3 | api docs: /api/v1 (legacy), /api/debug/health -->
+<script src="/app.js"></script>
+</body>
+</html>
